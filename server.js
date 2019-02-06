@@ -31,6 +31,7 @@ con.connect(function(err) {
 }); 
 
 
+// Functions 
 var count = 1;
 function calcHash(x) {
     var message = x.firstName + x.lastName + x.userType + x.email + x.date + x.gender + x.mobile;
@@ -40,8 +41,36 @@ function calcHash(x) {
     return hash;    
 }
 
+function getMaxId() {
+    var u, getMaxIdDoctor, getMaxIdPatient;
+
+    getMaxIdPatient = "SELECT MAX(id) AS patientMax FROM patient;";
+    getMaxIdDoctor = "SELECT MAX(id) AS doctorMax FROM doctor;";
+
+    con.query(getMaxIdPatient, function(err, res) {
+        patientMax = res[0]["patientMax"];
+
+        con.query(getMaxIdDoctor, function(err, res) {
+            doctorMax = res[0]["doctorMax"]; 
+
+            if(patientMax === null && doctorMax === null)
+                u = 2019021;
+            else if(patientMax === null)
+                u = doctorMax + 1;
+            else if(doctorMax === null)
+                u = patientMax + 1;
+            else
+                u = (patientMax > doctorMax) ? (patientMax + 1) : (doctorMax + 1);
+            
+            console.log(u);
+            return u;
+        });
+    });
+}
+
+
 //Block class created here
-class Block{
+class Block {
     constructor(x,prevHash,cipherText){
         this.prevHash=prevHash;
         this.currHash=calcHash(x);
@@ -65,88 +94,255 @@ var b = new Block(genData, "", genCipherText.toString());
 BlockChain[0] = b;
 
 
-// Login Route
+// Login and Registration Routes
 app.post('/login',function(request, response, error) {
-    var sql = "SELECT id, cipher_text FROM user WHERE id = " + request.body.username;
+    var sql, logQuery, user = request.body;
 
-    con.query(sql, function(req, res, err) {
-        if (err)
-            console.error(err); 
+    if(user.userType === "Patient") {
+        sql = "SELECT id, username, password FROM patient WHERE username = '" + user.username + "';";
 
-        decryptedText = JSON.parse(crypto.decrypt(res[0]['cipher_text']));
+        con.query(sql, function(err, res) {
+            if(res[0]["username"] === user.username && crypto.decrypt(res[0]["password"]) === user.password) {
+                response.setHeader('Content-Type', 'application/json');
+                response.send({
+                    id: res[0].id
+                });
+                response.end();
 
-        response.setHeader('Content-Type', 'application/json');        
-        if (decryptedText.password === request.body.password) {
-            let resData = {
-                id: res[0]['id'],
-                userType: decryptedText.userType
+                logQuery = "INSERT INTO log VALUES (NOW(), \"Patient with Username '" + user.username + "' logged into his/her account.\")";
+                con.query(logQuery);
             }
+            else {
+                response.setHeader('Content-Type', 'application/json');
+                response.send({
+                    message: "Wrong login credentials."
+                });
+                response.end();
 
-            response.send(resData);
-        }
+                logQuery = "INSERT INTO log VALUES (NOW(), \"Patient with Username '" + user.username + "' failed to log in due to invalid credentials.\")";
+                con.query(logQuery);
+            }
+        });
+    }
+    
+    else if(user.userType === "Doctor") {
+        sql = "SELECT id, username, password FROM doctor WHERE username = '" + user.username + "';";
 
-        else {
-            response.send({
-                error: "Wrong Password!"
-            });
-        }
-        response.end(); 
-    }) 
+        con.query(sql, function(err, res) {
+            if(res[0]["username"] === user.username && crypto.decrypt(res[0]["password"]) === user.password) {
+                response.setHeader('Content-Type', 'application/json');
+                response.send({
+                    id: res[0].id
+                });
+                response.end();
+
+                logQuery = "INSERT INTO log VALUES (NOW(), \"Doctor with Username '" + user.username + "' logged into his/her account.\")";
+                con.query(logQuery);
+            }
+            else {
+                response.setHeader('Content-Type', 'application/json');
+                response.send({
+                    message: "Wrong login credentials."
+                });
+                response.end();
+
+                logQuery = "INSERT INTO log VALUES (NOW(), \"Doctor with Username '" + user.username + "' failed to log in due to invalid credentials.\")";
+                con.query(logQuery);
+            }
+        });
+    }
+
+    else if(user.userType === "Hospital") {
+        sql = "SELECT id, username, password FROM hospital WHERE username = '" + user.username + "';";
+
+        con.query(sql, function(err, res) {
+            if(res[0].username === user.username && res[0].password == user.password) {
+                response.setHeader('Content-Type', 'application/json');
+                response.send({
+                    id: res[0].id
+                });
+                response.end();
+
+                logQuery = "INSERT INTO log VALUES (NOW(), \"Hospital with Username '" + user.username + "' logged into his/her account.\")";
+                con.query(logQuery);
+            } 
+            else {
+                response.setHeader('Content-Type', 'application/json');
+                response.send({
+                    message: "Wrong login credentials."
+                });
+                response.end();
+
+                logQuery = "INSERT INTO log VALUES (NOW(), \"Hospital with Username '" + user.username + "' failed to log in due to invalid credentials.\")";
+                con.query(logQuery);
+            } 
+        });
+    }
 });
 
-
-//  Patient Routes
-app.post('/createPatientBlock', function (request, response, error) {
+app.post('/createUser', function (request, response, error) {
     var encryptedText = crypto.encrypt(JSON.stringify(request.body));
-    // console.log("\nENCRYPTED TEXT: " + encryptedText);
     
     var b = new Block(request.body, BlockChain[count-1].currHash, encryptedText);
     BlockChain[count] = b;
 
+    // Create a new user record in the appropriate database table
+    var user, userId, getMaxIdPatient, getMaxIdDoctor, patientMax, doctorMax;
+    user = request.body;
 
-    // Retrieve maximum ID from the database table
-    var getMaxId = "SELECT MAX(id) AS id FROM user;";
+    if(user.userType === "Patient") {
+        getMaxIdPatient = "SELECT MAX(id) AS patientMax FROM patient;";
+        getMaxIdDoctor = "SELECT MAX(id) AS doctorMax FROM doctor;";
 
-    con.query(getMaxId, function(req, res, err) {
-        let userId;
+        con.query(getMaxIdPatient, function(err, res) {
+            patientMax = res[0]["patientMax"];
 
-        if(res[0].id === null)
-            userId = 2019011;
-        else 
-            userId = res[0].id + 1;
-             
-        console.log(userId);        
+            con.query(getMaxIdDoctor, function(err, res) {
+                doctorMax = res[0]["doctorMax"]; 
 
-        response.setHeader('Content-Type', 'application/json');
-        response.send({
-            id: userId
+                if(patientMax === null && doctorMax === null)
+                    userId = 2019021;
+                else if(patientMax === null)
+                    userId = doctorMax + 1;
+                else if(doctorMax === null)
+                    userId = patientMax + 1;
+                else
+                    userId = (patientMax > doctorMax) ? (patientMax + 1) : (doctorMax + 1);
+                
+                var createPatient = "INSERT INTO patient VALUES ( " + 
+                                                                userId + ", '" + 
+                                                                crypto.encrypt(user.firstName) + "', '" + 
+                                                                crypto.encrypt(user.lastName) + "', '" + 
+                                                                user.userName + "', '" + 
+                                                                crypto.encrypt(user.userType) + "', '" + 
+                                                                crypto.encrypt(user.email) + "', '" + 
+                                                                crypto.encrypt(user.password) + "', '" + 
+                                                                user.dob + "', '" + 
+                                                                crypto.encrypt(user.gender) + "', '" + 
+                                                                crypto.encrypt(user.mobile) + "', 2019011 );";
+
+                // console.log("\nPatient Query: " + createPatient);
+                con.query(createPatient, function(err, res) {
+                    response.setHeader('Content-Type', 'application/json');
+                    response.send({
+                        id: userId,
+                        userType: user.userType
+                    });
+                    response.end();
+
+                    console.log(user.userName);
+                    logQuery = "INSERT INTO log VALUES (NOW(), \"New Patient with Username '" + user.userName + "' successfully registered with the application.\")";
+                    con.query(logQuery);
+                });
+            });       
+
+        }); 
+    }
+
+    else if(user.userType === "Doctor") {
+        getMaxIdPatient = "SELECT MAX(id) AS patientMax FROM patient;";
+        getMaxIdDoctor = "SELECT MAX(id) AS doctorMax FROM doctor;";
+
+        con.query(getMaxIdPatient, function(err, res) {
+            patientMax = res[0]["patientMax"];
+
+            con.query(getMaxIdDoctor, function(err, res) {
+                doctorMax = res[0]["doctorMax"]; 
+
+                if(patientMax === null && doctorMax === null)
+                    userId = 2019021;
+                else if(patientMax === null)
+                    userId = doctorMax + 1;
+                else if(doctorMax === null)
+                    userId = patientMax + 1;
+                else
+                    userId = (patientMax > doctorMax) ? (patientMax + 1) : (doctorMax + 1);
+        
+                var createDoctor = "INSERT INTO doctor VALUES ( " + 
+                                                            userId + ", '" + 
+                                                            crypto.encrypt(user.firstName) + "', '" + 
+                                                            crypto.encrypt(user.lastName) + "', '" + 
+                                                            user.userName + "', '" + 
+                                                            crypto.encrypt(user.userType) + "', '" + 
+                                                            crypto.encrypt(user.email) + "', '" + 
+                                                            crypto.encrypt(user.password) + "', '" + 
+                                                            user.dob + "', '" + 
+                                                            crypto.encrypt(user.gender) + "', '" + 
+                                                            crypto.encrypt(user.mobile) + "', 2019011 );";
+    
+                // console.log("\nDoctor Query: " + createDoctor);
+                con.query(createDoctor, function(err, res) {
+                    response.setHeader('Content-Type', 'application/json');
+                    response.send({
+                        id: userId,
+                        userType: user.userType,
+                        hospitalId: "2019011"
+                    });
+                    response.end();
+
+                    logQuery = "INSERT INTO log VALUES (NOW(), \"New Doctor with Username '" + user.userName + "' successfully registered with the application.\")";
+                    con.query(logQuery);
+                }); 
+            });
         });
-        response.end();
-
-
-        // Insert patient's details once ID has been established
-        var createPatient = "INSERT INTO user(id, user_type, cipher_text, previous_hash, current_hash) VALUES ( " + userId + ", '" +  (request.body.userType).toUpperCase() + "', '" + encryptedText + "', '" + b.prevHash + "', '" + b.currHash + "' );";
-
-        con.query(createPatient); 
-    });
+    }
         
     count++; 
 });
 
-app.post('/displayPatientInfo', function(request, response, error) {
-    var sql = "SELECT id, cipher_text FROM user WHERE id = " + request.body.id; 
 
-    con.query(sql, function(err, res) { 
-        if(err)
-            console.error(err); 
+//  Patient Routes
+app.post('/displayInfo', function(request, response, error) {
+    var output;
+    var user = request.body;
 
-        var decryptedText = crypto.decrypt(res[0]['cipher_text']);
-        // console.log("\nDECRYPTED INFO: " + decryptedText);
+    if(user.userType === "Patient") {
+        var getPatientInfo = "SELECT * FROM patient WHERE id = " + user.id;
 
-        response.setHeader('Content-Type', 'application/json');
-        response.send(decryptedText);
-        response.end();
-    });
+        con.query(getPatientInfo, function(err, res) {
+            output = {
+                id: res[0].id,
+                firstName: crypto.decrypt(res[0].first_name),
+                lastName: crypto.decrypt(res[0].last_name),
+                userName: res[0].username,
+                email: crypto.decrypt(res[0].email),
+                dob: res[0].dob,
+                gender: crypto.decrypt(res[0].gender),
+                mobile: crypto.decrypt(res[0].mobile),
+            };
+            
+            response.setHeader('Content-Type', 'application/json');
+            response.send(output);
+            response.end();
+                    
+            logQuery = "INSERT INTO log VALUES (NOW(), \"Patient with Username '" + res[0].username + "' had his/her details viewed.\")";
+            con.query(logQuery);
+        });
+    }
+
+    else if(user.userType === "Doctor") {
+        var getDoctorInfo = "SELECT * FROM doctor WHERE id = " + user.id;
+
+        con.query(getDoctorInfo, function(err, res) {
+            output = {
+                id: user.id,
+                firstName: crypto.decrypt(res[0]["first_name"]),
+                lastName: crypto.decrypt(res[0]["last_name"]),
+                userName: res[0]["username"],
+                email: crypto.decrypt(res[0]["email"]),
+                dob: res[0]["dob"],
+                gender: crypto.decrypt(res[0]["gender"]),
+                mobile: crypto.decrypt(res[0]["mobile"]),
+            };
+            
+            response.setHeader('Content-Type', 'application/json');
+            response.send(output);
+            response.end();
+                    
+            logQuery = "INSERT INTO log VALUES (NOW(), \"Doctor with Username + '" + res[0].username + "' had his/her details viewed.\")";
+            con.query(logQuery);
+        });
+    }
 });
 
 app.post('/getPatientRequests', function(request, response, error) {
@@ -185,7 +381,7 @@ app.post('/resolveRequest', function(request, response, error) {
 
 // Doctor Routes
 app.post('/searchForPatient', function (request, response, error) {
-    var checkIfUserIsPresent = "SELECT id FROM user WHERE id = " + request.body.patientId + " AND user_type = 'PATIENT';";
+    var checkIfUserIsPresent = "SELECT id FROM patient WHERE id = " + request.body.patientId;
 
     con.query(checkIfUserIsPresent, function(err, res) {
         if(err)
@@ -213,11 +409,11 @@ app.post('/searchForPatient', function (request, response, error) {
 app.post('/getDoctorRequests', function(request, response, error) {
     let output = {};
 
-    var sql1 = "SELECT patient_id AS patientId, access FROM resolved_permission WHERE doctor_id = " + request.body.id;
+    var sql1 = "SELECT patient_id, access FROM resolved_permission WHERE doctor_id = " + request.body.id;
 
     con.query(sql1, function(err, res) {
         if(err)
-            console.error(err); 
+            console.error(err);
 
         output['resolvedPermissions'] = res;
 
@@ -234,6 +430,63 @@ app.post('/getDoctorRequests', function(request, response, error) {
             response.end();
         });
     });
+});
+
+
+// Hospital Routes
+app.post("/getPatients", function(request, response, error) {
+    var getPatients = "SELECT id, first_name, last_name, username FROM patient WHERE hospital_id = " + request.body.id;
+
+    con.query(getPatients, function(err, res) {
+        if(err)
+            console.error(err);
+
+        // console.log(res);
+
+        if(res.length === 0) {
+            response.setHeader('Content-Type', 'application/json');
+            response.send({
+                message: "No Patients registered with the Hospital with ID = " + request.body.id + "."
+            });
+            response.end();
+        }
+        else {
+            for(var i = 0; i < res.length; i++) {
+                res[i]["firstName"] = crypto.decrypt(res[i]["first_name"]);
+                res[i]["lastName"] = crypto.decrypt(res[i]["last_name"]);
+            }
+
+            response.setHeader('Content-Type', 'application/json');
+            response.send(res);
+            response.end();
+        }
+    });
+});
+
+
+// Miscellaneous
+app.post("/getUsername", function(request, response, error) {
+    var sql, user = request.body;
+
+    if(user.userType === "Patient") {
+        sql = "SELECT username FROM patient WHERE id = " + user.id;
+
+        con.query(sql, function(err, res) {
+            response.setHeader('Content-Type', 'application/json');
+            response.send(res);
+            response.end();
+        });
+    }
+
+    else if(user.userType === "Doctor") {
+        sql = "SELECT username FROM doctor WHERE id = " + user.id;
+
+        con.query(sql, function(err, res) {
+            response.setHeader('Content-Type', 'application/json');
+            response.send(res);
+            response.end();
+        });
+    }
 });
 
 
