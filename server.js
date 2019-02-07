@@ -230,7 +230,6 @@ app.post('/createUser', function (request, response, error) {
                     });
                     response.end();
 
-                    console.log(user.userName);
                     logQuery = "INSERT INTO log VALUES (NOW(), \"New Patient with Username '" + user.userName + "' successfully registered with the application.\")";
                     con.query(logQuery);
                 });
@@ -345,19 +344,6 @@ app.post('/displayInfo', function(request, response, error) {
     }
 });
 
-app.post('/getPatientRequests', function(request, response, error) {
-    var sql = "SELECT doctor_id FROM permission WHERE patient_id = " + request.body.id;
-
-    con.query(sql, function(err, res) {
-        if(err)
-            console.error(err);
-
-        response.setHeader('Content-Type', 'application/json');
-        response.send(res);
-        response.end();
-    });
-});
-
 app.post('/resolveRequest', function(request, response, error) {
     if(request.body.access === true) {
         con.query("INSERT INTO resolved_permission VALUES ( " + request.body.doctorId + ", " + request.body.patientId + ", 'YES' );");
@@ -435,7 +421,7 @@ app.post('/getDoctorRequests', function(request, response, error) {
 
 // Hospital Routes
 app.post("/getPatients", function(request, response, error) {
-    var getPatients = "SELECT id, first_name, last_name, username FROM patient WHERE hospital_id = " + request.body.id;
+    var getPatients = "SELECT patient_id FROM hospital_record WHERE hospital_id = " + request.body.id;
 
     con.query(getPatients, function(err, res) {
         if(err)
@@ -446,16 +432,11 @@ app.post("/getPatients", function(request, response, error) {
         if(res.length === 0) {
             response.setHeader('Content-Type', 'application/json');
             response.send({
-                message: "No Patients registered with the Hospital with ID = " + request.body.id + "."
+                message: "No Patients have wished to share their records with Hospital with ID = " + request.body.id + "."
             });
             response.end();
         }
         else {
-            for(var i = 0; i < res.length; i++) {
-                res[i]["firstName"] = crypto.decrypt(res[i]["first_name"]);
-                res[i]["lastName"] = crypto.decrypt(res[i]["last_name"]);
-            }
-
             response.setHeader('Content-Type', 'application/json');
             response.send(res);
             response.end();
@@ -463,15 +444,171 @@ app.post("/getPatients", function(request, response, error) {
     });
 });
 
+app.post('/getPatientRequests', function(request, response, error) {
+    var sql = "SELECT doctor_id FROM permission WHERE patient_id = " + request.body.id;
+
+    con.query(sql, function(err, res) {
+        if(err)
+            console.error(err);
+
+        response.setHeader('Content-Type', 'application/json');
+        response.send(res);
+        response.end();
+    });
+});
+
+app.post("/getPatientRecords", function(request, response, error) {
+    var output = [], user = request.body;
+
+    var getRecordIds = "SELECT record_id AS id FROM hospital_record WHERE hospital_id = " + user.hospitalId + " AND patient_id = " + user.patientId;
+
+    con.query(getRecordIds, function(err, res) {
+        if(err) {
+            console.log(res);
+             
+            response.setHeader('Content-Type', 'application/json');
+            response.send({
+                message: "No Records found for selected Patient."
+            });
+            response.end(); 
+        }
+
+        else {
+            console.log(res);
+            
+            response.setHeader('Content-Type', 'application/json');
+            response.send(res);
+            response.end(); 
+        }
+    });
+});
+
 
 // Miscellaneous
+app.post("/changePassword", function(request, response, error) {
+    var password, updatePassword, user = request.body, newPassword = crypto.encrypt(user.newPassword);
+
+    var getPatient = "SELECT password FROM patient WHERE username = '" + user.userName + "';";
+
+    con.query(getPatient, function(err, res) {
+        if(res.length > 0) {
+            updatePassword = "UPDATE patient SET password = '" + newPassword + "' WHERE username = '" + user.userName + "';";
+
+            con.query(updatePassword, function(err, res) {
+                if(err) {
+                    response.setHeader('Content-Type', 'application/json');
+                    response.send({
+                        message: "Password could not be updated for Patient '" + user.userName + "'."
+                    });
+                    response.end();
+                    
+                    logQuery = "INSERT INTO log VALUES (NOW(), \"Patient with Username '" + user.userName + "' failed to update password successfully.\")";
+                    con.query(logQuery);
+                }
+                
+                else {
+                    response.setHeader('Content-Type', 'application/json');
+                    response.send({
+                        message: "Password updated successfully for Patient '" + user.userName + "'."
+                    });
+                    response.end();
+                    
+                    logQuery = "INSERT INTO log VALUES (NOW(), \"Patient with Username '" + user.userName + "' updated password successfully.\")";
+                    con.query(logQuery);
+                }
+            });
+        }
+
+        else {
+            var getDoctor = "SELECT password FROM doctor WHERE username = '" + user.userName + "';";
+
+            con.query(getDoctor, function(err, res) {
+                if(res.length > 0) {
+                    updatePassword = "UPDATE doctor SET password = '" + newPassword + "' WHERE username = '" + user.userName + "';";
+
+                    con.query(updatePassword, function(err, res) {
+                        if(err) {
+                            response.setHeader('Content-Type', 'application/json');
+                            response.send({
+                                message: "Password could not be updated for Doctor '" + user.userName + "'."
+                            });
+                            response.end();
+                    
+                            logQuery = "INSERT INTO log VALUES (NOW(), \"Doctor with Username '" + user.userName + "' failed to update password successfully.\")";
+                            con.query(logQuery);
+                        }
+                        
+                        else {
+                            response.setHeader('Content-Type', 'application/json');
+                            response.send({
+                                message: "Password updated successfully for Doctor '" + user.userName + "'."
+                            });
+                            response.end();
+                    
+                            logQuery = "INSERT INTO log VALUES (NOW(), \"Doctor with Username '" + user.userName + "' updated password successfully.\")";
+                            con.query(logQuery);
+                        }
+                    });
+                }
+        
+                else {
+                    var getHospital = "SELECT password FROM hospital WHERE username = '" + user.userName + "';";
+        
+                    con.query(getHospital, function(err, res) {
+                        if(res.length > 0) {
+                            updatePassword = "UPDATE hospital SET password = '" + user.newPassword + "' WHERE username = '" + user.userName + "';";
+
+                            con.query(updatePassword, function(err, res) {
+                                if(err) {
+                                    response.setHeader('Content-Type', 'application/json');
+                                    response.send({
+                                        message: "Password could not be updated for Hospital '" + user.userName + "'."
+                                    });
+                                    response.end();
+                    
+                                    logQuery = "INSERT INTO log VALUES (NOW(), \"Hospital with Username '" + user.userName + "' failed to update password successfully.\")";
+                                    con.query(logQuery);
+                                }
+
+                                else {
+                                    response.setHeader('Content-Type', 'application/json');
+                                    response.send({
+                                        message: "Password updated successfully for Hospital '" + user.userName + "'."
+                                    });
+                                    response.end();
+                    
+                                    logQuery = "INSERT INTO log VALUES (NOW(), \"Hospital with Username '" + user.userName + "' updated password successfully.\")";
+                                    con.query(logQuery);
+                                }
+                            });
+                        }
+                
+                        else {                
+                            response.setHeader('Content-Type', 'application/json');
+                            response.send({
+                                message: "User with username '" + user.userName + "' does not exist."
+                            });
+                            response.end();
+                        }
+                    });
+                }
+            });
+        }
+    });
+});
+
 app.post("/getUsername", function(request, response, error) {
     var sql, user = request.body;
 
     if(user.userType === "Patient") {
-        sql = "SELECT username FROM patient WHERE id = " + user.id;
+        sql = "SELECT first_name, last_name, username FROM patient WHERE id = " + user.id;
 
         con.query(sql, function(err, res) {
+            for(let i = 0; i < res.length; i++) {
+                res[i]["firstName"] = crypto.decrypt(res[i]["first_name"]);
+                res[i]["lastName"] = crypto.decrypt(res[i]["last_name"]);
+            }
+
             response.setHeader('Content-Type', 'application/json');
             response.send(res);
             response.end();
@@ -479,14 +616,29 @@ app.post("/getUsername", function(request, response, error) {
     }
 
     else if(user.userType === "Doctor") {
-        sql = "SELECT username FROM doctor WHERE id = " + user.id;
+        sql = "SELECT first_name, last_name, username FROM doctor WHERE id = " + user.id;
 
         con.query(sql, function(err, res) {
+            for(let i = 0; i < res.length; i++) {
+                res[i]["firstName"] = crypto.decrypt(res[i]["first_name"]);
+                res[i]["lastName"] = crypto.decrypt(res[i]["last_name"]);
+            }
+
             response.setHeader('Content-Type', 'application/json');
             response.send(res);
             response.end();
         });
     }
+});
+
+app.post("/getRecord", function(request, response, error) {
+    var sql = "SELECT id, record_content AS record FROM record WHERE id = " + request.body.id;
+
+    con.query(sql, function(err, res) {
+        response.setHeader('Content-Type', 'application/json');
+        response.send(res);
+        response.end();
+    });
 });
 
 
