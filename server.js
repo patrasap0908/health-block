@@ -36,7 +36,7 @@ con.connect(function(err) {
 // Hash Calculation function
 function calcHash(x) {
     var sha256 = new jsSHA('SHA-256', 'TEXT');
-    sha256.update(x);
+    sha256.update(x.username + x.password);
     var hash = sha256.getHash("HEX");
     return hash;    
 }
