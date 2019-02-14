@@ -12,8 +12,10 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cors());
 
 
+
 // Crypto instance created 
 const crypto = new Crypto("secret key");
+
 
 
 // MySQL Connection Created
@@ -29,41 +31,6 @@ con.connect(function(err) {
         throw err;
 }); 
 
-
-// Functions 
-var count = 1;
-function calcHash(x) {
-    var message = x.firstName + x.lastName + x.userType + x.email + x.date + x.gender + x.mobile;
-    var sha256 = new jsSHA('SHA-256', 'TEXT');
-    sha256.update(message);
-    var hash = sha256.getHash("HEX");
-    return hash;    
-}
-
-
-//Block class created here
-class Block {
-    constructor(x,prevHash,cipherText){
-        this.prevHash=prevHash;
-        this.currHash=calcHash(x);
-        this.cipherText=cipherText;
-    }    
-}
-
-//Genesis Block Created 
-var BlockChain = new Array(100);
-
-var genDate = new Date();
-var genData = { 
-                'index': 0, 
-                'timeStamp': genDate, 
-                'BPM': 0 
-            };
-
-var genCipherText = CryptoJS.AES.encrypt(JSON.stringify(genData), 'secret key 123');
-var b = new Block(genData, "", genCipherText.toString());
-
-BlockChain[0] = b;
 
 
 // Login and Registration Routes
@@ -221,10 +188,6 @@ app.post('/login',function(request, response, error) {
 });
 
 app.post('/createUser', function (request, response, error) {
-    var encryptedText = crypto.encrypt(JSON.stringify(request.body));
-    
-    var b = new Block(request.body, BlockChain[count-1].currHash, encryptedText);
-    BlockChain[count] = b;
 
     // Create a new user record in the appropriate database table
     var user, userId, getMaxIdPatient, getMaxIdDoctor, patientMax, doctorMax;
@@ -271,10 +234,26 @@ app.post('/createUser', function (request, response, error) {
 
                     logQuery = "INSERT INTO log VALUES (NOW(), \"New Patient with Username '" + user.userName + "' successfully registered with the application.\")";
                     con.query(logQuery);
+                });  
+
+    
+                // Create a Block corresponding to the newly created Patient
+                var getPrevHash = "SELECT current_hash FROM user_block ORDER BY timestamp DESC LIMIT 1;";
+            
+                con.query(getPrevHash, function(request, response, error) {
+                    var createUserBlock = "INSERT INTO user_block VALUES ( " + userId + ", '" + user.userName + "', NOW(), '" + response[0]["current_hash"] + "', '" + calcHash(user) + "' );";
+            
+                    con.query(createUserBlock, function(err, res) {
+                        if(err) 
+                            console.error(err);
+            
+                        else 
+                            console.log("Block created");
+                    }); 
                 });
             });       
 
-        }); 
+        });  
     }
 
     else if(user.userType === "Doctor") {
@@ -322,9 +301,8 @@ app.post('/createUser', function (request, response, error) {
                 }); 
             });
         });
-    }
-        
-    count++; 
+    } 
+    
 });
 
 
@@ -446,7 +424,7 @@ app.post("/getPatientRecords", function(request, response, error) {
         else {            
             response.setHeader('Content-Type', 'application/json');
             response.send(res);
-            response.end(); 
+            response.end();
 
             logQuery = "INSERT INTO log VALUES (NOW(), \"Hospital with ID '" + user.hospitalId + "' viewed the Records of Patient with ID '" + user.patientId + ".\")";
             con.query(logQuery);
@@ -677,7 +655,7 @@ app.post('/displayInfo', function(request, response, error) {
             response.send(output);
             response.end();
                     
-            logQuery = "INSERT INTO log VALUES (NOW(), \"Doctor with Username + '" + res[0].username + "' had his/her Profile Details viewed.\")";
+            logQuery = "INSERT INTO log VALUES (NOW(), \"Doctor with Username '" + res[0].username + "' had his/her Profile Details viewed.\")";
             con.query(logQuery);
         });
     }
