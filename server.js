@@ -33,6 +33,16 @@ con.connect(function(err) {
 
 
 
+// Hash Calculation function
+function calcHash(x) {
+    var sha256 = new jsSHA('SHA-256', 'TEXT');
+    sha256.update(x);
+    var hash = sha256.getHash("HEX");
+    return hash;    
+}
+
+
+
 // Login and Registration Routes
 app.post('/login',function(request, response, error) {
     var sql, logQuery, user = request.body;
