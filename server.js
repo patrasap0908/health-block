@@ -204,7 +204,7 @@ app.post('/createUser', function (request, response, error) {
     user = request.body;
 
     if(user.userType === "Patient") {
-        getMaxIdPatient = "SELECT MAX(id) AS patientMax FROM patient;";
+        getMaxIdPatient = "SELECT maxId AS patientMax FROM patient;";
         getMaxIdDoctor = "SELECT MAX(id) AS doctorMax FROM doctor;";
 
         con.query(getMaxIdPatient, function(err, res) {
@@ -363,6 +363,65 @@ app.post("/searchForHospital", function(request, response, error) {
                     con.query(logQuery);
                 }
             });
+        }
+    });
+});
+
+app.post("/addRecord", function(request, response, error) {
+    var message, insertRecord, record = request.body;
+    var getMaxRecordId = "SELECT MAX(record_id) AS maxId FROM record;";
+
+    con.query(getMaxRecordId, function(err, res) {
+        if(err)
+            console.error(err);
+        
+        else if(res.length === 0) {
+            if(record.type === "Document") {
+                // console.log(record.date);
+                insertRecord = "INSERT INTO record VALUES (810011, " + record.patientId + ", '" + crypto.encrypt(record) + "', '" + record.date + "', 'Document');";
+
+                con.query(insertRecord, function(err, res) {
+                    if(err) 
+                        message = "Record could not be added. Try again.";
+
+                    else
+                        message = "Record added succesfully.";
+
+                    response.setHeader('Content-Type', 'application/json');
+                    response.send({
+                        message: message
+                    });
+                    response.end();
+                });  
+            }
+        
+            else if(record.type === "Image") {
+        
+            }
+        }
+
+        else if(res.length > 0) {
+            if(record.type === "Document") {
+                insertRecord = "INSERT INTO record VALUES (" + (res[0]['maxId'] + 1) + ", " + record.patientId + ", '" + crypto.encrypt(record) + "', '" + record.date + "', 'Document');";
+
+                con.query(insertRecord, function(err, res) {
+                    if(err) 
+                        message = "Record could not be added. Try again.";
+
+                    else
+                        message = "Record added succesfully.";
+
+                    response.setHeader('Content-Type', 'application/json');
+                    response.send({
+                        message: message
+                    });
+                    response.end();
+                }); 
+            }
+        
+            else if(record.type === "Image") {
+        
+            }
         }
     });
 });
